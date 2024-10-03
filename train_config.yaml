@@ -1,0 +1,6 @@
+Segformer-B0:
+  dataset: "ADE20K"
+  batch_size: 2
+  epochs: 40
+  learning_rate: 6e-5
+  
