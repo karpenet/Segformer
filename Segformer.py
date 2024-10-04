@@ -1,10 +1,24 @@
+from dataclasses import dataclass
 import torch.nn as nn
 import torch
 from einops import rearrange
 from torchvision.ops import StochasticDepth
 from collections import defaultdict
 import numpy as np
+from typing import List, Literal
 
+arch = Literal["B0", "B1", "B2", "B3", "B4", "B5"]
+
+@dataclass
+class SegformerConfig:
+    kernel_size: List[int]
+    stride: List[int]
+    padding: List[int]
+    channels: List[int]
+    reduction_ratio: List[int]
+    num_heads: List[int]
+    expansion_ratio: List[int]
+    num_encoders: List[int]
 
 class LayerNorm2D(nn.Module):
     def __init__(self, dim):
@@ -196,54 +210,22 @@ class MLPDecoder(nn.Module):
 
 
 class Segformer(nn.Module):
-    def __init__(self):
+    def __init__(self, model_config: SegformerConfig):
         super().__init__()
         self.encoder_blocks = nn.ModuleList(
             [
                 MixFFNEncoder(
-                    in_channels=3,
-                    out_channels=32,
-                    kernel_size=3,
-                    stride=4,
-                    padding=3,
-                    reduction_ratio=8,
-                    num_heads=1,
-                    expansion_ratio=8,
-                    n_layers=2,
-                ),
-                MixFFNEncoder(
-                    in_channels=32,
-                    out_channels=64,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    reduction_ratio=4,
-                    num_heads=2,
-                    expansion_ratio=8,
-                    n_layers=2,
-                ),
-                MixFFNEncoder(
-                    in_channels=64,
-                    out_channels=160,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    reduction_ratio=2,
-                    num_heads=5,
-                    expansion_ratio=4,
-                    n_layers=2,
-                ),
-                MixFFNEncoder(
-                    in_channels=160,
-                    out_channels=256,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    reduction_ratio=1,
-                    num_heads=8,
-                    expansion_ratio=4,
-                    n_layers=2,
-                ),
+                    in_channels=3 if i == 0 else model_config.channels[i - 1],
+                    out_channels=model_config.channels[i],
+                    kernel_size=model_config.kernel_size[i],
+                    stride=model_config.stride[i],
+                    padding=model_config.padding[i],
+                    reduction_ratio=model_config.reduction_ratio[i],
+                    num_heads=model_config.num_heads[i],
+                    expansion_ratio=model_config.expansion_ratio[i],
+                    n_layers=model_config.num_encoders[i],
+                )
+                for i in range(4)
             ]
         )
         self.decoder = MLPDecoder([32, 64, 160, 256], 256, (64, 64), 4)
@@ -266,14 +248,9 @@ class Segformer(nn.Module):
         ious = []
 
         for i in range(4):
-          #find values where preds == i
           preds_mask = torch.where(preds == i, 1.0, 0.0)
-          #find values where preds == targets
           targets_mask = torch.where(targets == i, 1.0, 0.0)
 
-          #now we have a pred_mask and target_mask for that specific class,
-          #so we take the iou between pred_mask and target_mask
-          # get iou
           intersection = torch.sum(targets_mask * preds_mask)
           union = torch.sum(targets_mask) + torch.sum(preds_mask) - intersection
           iou = intersection.to(torch.float) / union.to(torch.float)
