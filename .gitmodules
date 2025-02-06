@@ -1,0 +1,3 @@
+[submodule "QAT/SegFormer"]
+	path = QAT/SegFormer
+	url = git@github.com:NVlabs/SegFormer.git
