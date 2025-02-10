@@ -9,7 +9,7 @@ from PIL import Image
 import evaluate
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-metric = evaluate.load('mean-iou')
+metric = evaluate.load('mean_iou')
 
 config = SegformerConfig()
 processor = SegformerImageProcessor(do_resize=False)
@@ -29,16 +29,6 @@ with torch.no_grad():
 
 predicted_segmentation_map = processor.post_process_semantic_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
 predicted_segmentation_map = predicted_segmentation_map.cpu().numpy()
-
-
-result = metric._compute(
-    predictions=predicted.cpu(),
-    references=labels.cpu(),
-    num_labels=len(id2label),
-    ignore_index=255,
-    reduce_labels=False,
-)
-
 
 color_seg = np.zeros((predicted_segmentation_map.shape[0],
                       predicted_segmentation_map.shape[1], 3), dtype=np.uint8) # height, width, 3

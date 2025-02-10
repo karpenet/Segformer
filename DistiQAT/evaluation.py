@@ -24,12 +24,15 @@ class Metrics:
         return dataloader
 
     @staticmethod
-    def save_outputs(images, output, processor, batch_idx=0, batch_size=0):
+    def save_outputs(images, labels, output, processor, batch_idx=0, batch_size=0):
         for idx in range(len(images)):
-            predicted_segmentation_map = processor.post_process_semantic_segmentation(output[idx], target_sizes=[images[idx].shape[::-1]])[0]
-            predicted_segmentation_map = predicted_segmentation_map.cpu().numpy()
-
+            predicted_segmentation_map = output[idx].cpu().numpy()
             color_seg = np.zeros((predicted_segmentation_map.shape[0],
+                predicted_segmentation_map.shape[1], 3), 
+                dtype=np.uint8
+            ) # height, width, 3
+
+            label_seg  = np.zeros((predicted_segmentation_map.shape[0],
                 predicted_segmentation_map.shape[1], 3), 
                 dtype=np.uint8
             ) # height, width, 3
@@ -37,18 +40,24 @@ class Metrics:
             palette = np.array(ade_palette())
             for label, color in enumerate(palette):
                 color_seg[predicted_segmentation_map == label, :] = color
+                label_seg[labels[idx] == label, :] = color
 
             # Convert to BGR
             color_seg = color_seg[..., ::-1]
+            label_seg = label_seg[..., ::-1]
+
+            seg = np.concatenate((label_seg, color_seg), axis=1)
+            img = np.concatenate((np.moveaxis(images[idx], 0, -1), np.moveaxis(images[idx], 0, -1)), axis=1)
 
             # Show image + mask
-            img = np.array(images[idx]) * 0.5 + color_seg * 0.5
+            img = img + seg * 0.5
             img = img.astype(np.uint8)
 
             img = Image.fromarray(img)
             img.save(f"../data/ADEChallengeData2016/output/{batch_idx * batch_size + idx}.jpeg")
 
     @staticmethod
+    @torch.no_grad()
     def evaluate_model(
         model: nn.Module,
         dataset: str,
@@ -59,7 +68,6 @@ class Metrics:
 
         id2label = json.load(open('id2label.json', "r"))
         id2label = {int(k): v for k, v in id2label.items()}
-        result = None
 
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         batch_size = 8
@@ -79,15 +87,26 @@ class Metrics:
                 predicted = upsampled_logits.argmax(dim=1)
 
             if save_output:
-                Metrics.save_outputs(images=images.detach().cpu().numpy(), output=output, processor=processor, batch_idx=idx, batch_size=batch_size)
+                Metrics.save_outputs(
+                    images=images.detach().cpu().numpy(), 
+                    labels=labels.detach().cpu().numpy(), 
+                    output=predicted, 
+                    processor=processor, 
+                    batch_idx=idx, 
+                    batch_size=batch_size,
+                )
 
-            metric.add_batch(predictions=predicted.detach().cpu().numpy(), references=labels.detach().cpu().numpy())
+            metric.add_batch(
+                predictions=predicted.detach().cpu().numpy(), 
+                references=labels.detach().cpu().numpy(),
+            )
 
-        result = metric._compute(
+        result = metric.compute(
             predictions=predicted.cpu(),
             references=labels.cpu(),
             num_labels=len(id2label),
             ignore_index=255,
+            nan_to_num=0.,
             reduce_labels=False,
         )
 
@@ -96,6 +115,6 @@ class Metrics:
 
 if __name__ == "__main__":
     model = SegformerForSemanticSegmentation.from_pretrained('nvidia/segformer-b4-finetuned-ade-512-512')
-    results = Metrics.evaluate_model(model, dataset='../data/ADEChallengeData2016', save_output=True)
+    results = Metrics.evaluate_model(model, dataset='../data/ADEChallengeData2016', save_output=False)
     print(results)
 

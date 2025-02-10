@@ -77,7 +77,8 @@ class DistilModel:
         # Initialize dataset and dataloader
         train_dataset = SemanticSegmentationDataset(root_dir=self.config.dataset, image_processor=self.processor)
         val_dataset = SemanticSegmentationDataset(root_dir=self.config.dataset, image_processor=self.processor, train=False)
-        self.train_loader = DataLoader(train_dataset, batch_size=self.config.batch_size, shuffle=False)
+
+        self.train_loader = DataLoader(train_dataset, batch_size=self.config.batch_size, shuffle=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.config.batch_size)
 
         # Define optimizer
@@ -97,10 +98,10 @@ class DistilModel:
             wandb.finish()        
 
     def train(self):
-        for epoch in tqdm(range(self.config.num_epochs), position=0, unit='epoch'):
+        for epoch in tqdm(range(self.config.num_epochs), desc='Epoch', position=0, unit='epoch'):
             total_loss = 0.0
             self.student_model.train()
-            for batch_idx, batch in enumerate(tqdm(self.train_loader, position=1, leave=False, unit='batch')):
+            for batch_idx, batch in enumerate(tqdm(self.train_loader, desc='Batch', position=1, leave=False, unit='batch')):
                 images = batch['pixel_values'].to(self.device)
                 labels = batch['labels'].to(self.device)
 
@@ -120,6 +121,8 @@ class DistilModel:
                 if batch_idx % 10 == 0:
                     if self.config.log_wandb:
                         wandb.log({"Distillation Loss": loss.item()})
+
+            torch.cuda.empty_cache()
 
             avg_loss = total_loss / len(self.train_loader)
 
@@ -151,20 +154,23 @@ class DistilModel:
                 predicted = upsampled_logits.argmax(dim=1)
 
             metric.add_batch(predictions=predicted.detach().cpu().numpy(), references=labels.detach().cpu().numpy())
-        
+
         # Compute metrics
-        result = metric._compute(
+        result = metric.compute(
             predictions=predicted.cpu(),
             references=labels.cpu(),
             num_labels=150,
             ignore_index=255,
+            nan_to_num=0,
             reduce_labels=False,
         )
+        
+        torch.cuda.empty_cache()
 
         return result
 
 
 if __name__ == "__main__":
-    config = DistillationConfig(batch_size=8, num_epochs=2, log_wandb=True)
+    config = DistillationConfig(batch_size=8, num_epochs=100, log_wandb=True)
     distillation = DistilModel(config)
     distillation.train()
