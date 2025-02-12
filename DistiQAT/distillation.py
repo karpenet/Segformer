@@ -24,7 +24,7 @@ class DistillationConfig:
     num_epochs: int = 100
     batch_size: int = 8
     learning_rate: float = 0.001
-    temperature: float = 0.3
+    temperature: float = 3.0
     alpha: float = 0.5
     weights_file: str = 'b4_to_b0_distill.pth'
     log_wandb: bool = True
@@ -38,7 +38,7 @@ class DistillationLoss(nn.Module):
         self.alpha = alpha
 
         self.kl_loss = nn.KLDivLoss(reduction='batchmean')
-        self.ce_loss = nn.CrossEntropyLoss()
+        self.ce_loss = nn.CrossEntropyLoss(ignore_index=255)
     
     def forward(self, student_logits, teacher_logits, labels):
         soft_targets = F.log_softmax(student_logits / self.temperature, dim=-1)
@@ -143,7 +143,7 @@ class DistilModel:
 
         # Validation Loop
         self.student_model.eval()
-        for batch_idx, batch in enumerate(tqdm(self.val_loader, position=1, leave=False, unit='batch')):
+        for batch_idx, batch in enumerate(tqdm(self.val_loader, desc='Validation', position=1, leave=False, unit='batch')):
             images = batch['pixel_values'].to(self.device)
             labels = batch['labels'].to(self.device)
 
@@ -164,13 +164,13 @@ class DistilModel:
             nan_to_num=0,
             reduce_labels=False,
         )
-        
+
         torch.cuda.empty_cache()
 
         return result
 
 
 if __name__ == "__main__":
-    config = DistillationConfig(batch_size=8, num_epochs=100, log_wandb=True)
+    config = DistillationConfig(batch_size=8, num_epochs=50, log_wandb=True)
     distillation = DistilModel(config)
     distillation.train()
