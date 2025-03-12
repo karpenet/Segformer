@@ -20,6 +20,7 @@ class SegformerConfig:
     expansion_ratio: List[int]
     num_encoders: List[int]
 
+
 class LayerNorm2D(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -65,7 +66,9 @@ class EfficientSelfAttention(nn.Module):
             ),
             LayerNorm2D(channels),
         )
-        self.attention = nn.MultiheadAttention(embed_dim=channels, num_heads=num_heads, batch_first=True)
+        self.attention = nn.MultiheadAttention(
+            embed_dim=channels, num_heads=num_heads, batch_first=True
+        )
 
     def forward(self, x):
         _, _, h, w = x.shape
@@ -244,16 +247,35 @@ class Segformer(nn.Module):
         return self.decoder(embeds[1:])
 
     def miou(self, prediction, targets):
-        preds = torch.argmax(prediction, dim=1) # gives me the class number
+        preds = torch.argmax(prediction, dim=1)  # gives me the class number
         ious = []
 
         for i in range(4):
-          preds_mask = torch.where(preds == i, 1.0, 0.0)
-          targets_mask = torch.where(targets == i, 1.0, 0.0)
+            preds_mask = torch.where(preds == i, 1.0, 0.0)
+            targets_mask = torch.where(targets == i, 1.0, 0.0)
 
-          intersection = torch.sum(targets_mask * preds_mask)
-          union = torch.sum(targets_mask) + torch.sum(preds_mask) - intersection
-          iou = intersection.to(torch.float) / union.to(torch.float)
-          ious.append(iou.cpu().data.numpy())
+            intersection = torch.sum(targets_mask * preds_mask)
+            union = torch.sum(targets_mask) + torch.sum(preds_mask) - intersection
+            iou = intersection.to(torch.float) / union.to(torch.float)
+            ious.append(iou.cpu().data.numpy())
 
         return np.mean(ious)
+
+
+if __name__ == "__main__":
+    config = SegformerConfig(
+        kernel_size=[7, 3, 3, 3],
+        stride=[4, 2, 2, 2],
+        padding=[3, 1, 1, 1],
+        channels=[32, 64, 160, 256],
+        reduction_ratio=[8, 4, 2, 1],
+        num_heads=[1, 2, 5, 8],
+        expansion_ratio=[8, 8, 4, 4],
+        num_encoders=[2, 2, 2, 2],
+    )
+    model = Segformer(config)
+    # print(model.state_dict().keys())
+
+    print(type("\n".join(list(model.state_dict().keys()))))
+    with open("paraya.txt", "a") as text_file:
+        text_file.write("\n".join(list(model.state_dict().keys())))
