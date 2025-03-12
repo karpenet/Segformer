@@ -2,6 +2,8 @@
 
 This repository contains the implementation of a Segformer model for semantic segmentation using PyTorch. The training pipeline is designed to work with the ADE20K dataset and uses Weights & Biases (wandb) for experiment tracking.
 
+![Training Plots](wandb.png)
+
 ## Prerequisites
 
 - Python 3.8 or higher
